@@ -1,15 +1,16 @@
-import express from "express";
-import cors from "cors";
-import Database from "better-sqlite3";
+import express from 'express';
+import cors from 'cors';
+import Database from 'better-sqlite3';
 
 const app = express();
 const PORT = 3001;
-const db = new Database("database.db");
+const db = new Database('database.db');
 
 app.use(cors());
 app.use(express.json());
 
-// --- DATABASE SCHEMA ---
+// --- DATABASE MIGRATION & INIT ---
+// 1. Create table if it doesn't exist
 db.exec(`
   CREATE TABLE IF NOT EXISTS logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -26,45 +27,41 @@ db.exec(`
   )
 `);
 
+// 2. Add new columns to existing databases safely
+try {
+    db.exec("ALTER TABLE logs ADD COLUMN status TEXT DEFAULT 'COMPLETED'");
+    console.log("Migrated: Added 'status' column.");
+} catch (e) { /* Column likely exists, ignore */ }
+
+try {
+    db.exec("ALTER TABLE logs ADD COLUMN total_episodes INTEGER");
+    console.log("Migrated: Added 'total_episodes' column.");
+} catch (e) { /* Column likely exists, ignore */ }
+
+
 // --- API ROUTES ---
 
 // GET all logs
-app.get("/api/logs", (req, res) => {
-    const stmt = db.prepare(
-        "SELECT * FROM logs ORDER BY date_watched DESC, created_at DESC"
-    );
+app.get('/api/logs', (req, res) => {
+    const stmt = db.prepare('SELECT * FROM logs ORDER BY date_watched DESC, created_at DESC');
     const logs = stmt.all();
     res.json(logs);
 });
 
 // POST new log
-app.post("/api/logs", (req, res) => {
-    const {
-        title,
-        type,
-        release_year,
-        rating,
-        date_watched,
-        is_rewatch,
-        season,
-        episode,
-        notes,
-    } = req.body;
+app.post('/api/logs', (req, res) => {
+    const { title, type, release_year, rating, date_watched, is_rewatch, season, episode, notes, status, total_episodes } = req.body;
+
     const stmt = db.prepare(`
-    INSERT INTO logs (title, type, release_year, rating, date_watched, is_rewatch, season, episode, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO logs (title, type, release_year, rating, date_watched, is_rewatch, season, episode, notes, status, total_episodes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
+
     try {
         const info = stmt.run(
-            title,
-            type,
-            release_year,
-            rating,
-            date_watched,
-            is_rewatch ? 1 : 0,
-            season || null,
-            episode || null,
-            notes
+            title, type, release_year, rating, date_watched,
+            is_rewatch ? 1 : 0, season || null, episode || null, notes,
+            status || 'COMPLETED', total_episodes || null
         );
         res.status(201).json({ id: info.lastInsertRowid });
     } catch (err) {
@@ -73,41 +70,24 @@ app.post("/api/logs", (req, res) => {
 });
 
 // PUT (Update) existing log
-app.put("/api/logs/:id", (req, res) => {
-    const {
-        title,
-        type,
-        release_year,
-        rating,
-        date_watched,
-        is_rewatch,
-        season,
-        episode,
-        notes,
-    } = req.body;
+app.put('/api/logs/:id', (req, res) => {
+    const { title, type, release_year, rating, date_watched, is_rewatch, season, episode, notes, status, total_episodes } = req.body;
     const { id } = req.params;
 
     const stmt = db.prepare(`
     UPDATE logs 
-    SET title=?, type=?, release_year=?, rating=?, date_watched=?, is_rewatch=?, season=?, episode=?, notes=?
+    SET title=?, type=?, release_year=?, rating=?, date_watched=?, is_rewatch=?, season=?, episode=?, notes=?, status=?, total_episodes=?
     WHERE id=?
   `);
 
     try {
         const info = stmt.run(
-            title,
-            type,
-            release_year,
-            rating,
-            date_watched,
-            is_rewatch ? 1 : 0,
-            season || null,
-            episode || null,
-            notes,
+            title, type, release_year, rating, date_watched,
+            is_rewatch ? 1 : 0, season || null, episode || null, notes,
+            status || 'COMPLETED', total_episodes || null,
             id
         );
-        if (info.changes === 0)
-            return res.status(404).json({ error: "Log not found" });
+        if (info.changes === 0) return res.status(404).json({ error: "Log not found" });
         res.json({ success: true });
     } catch (err) {
         res.status(400).json({ error: err.message });
@@ -122,11 +102,9 @@ app.delete('/api/logs/:id', (req, res) => {
 });
 
 // SEARCH logs
-app.get("/api/search", (req, res) => {
+app.get('/api/search', (req, res) => {
     const { q } = req.query;
-    const stmt = db.prepare(
-        "SELECT * FROM logs WHERE title LIKE ? ORDER BY date_watched DESC"
-    );
+    const stmt = db.prepare('SELECT * FROM logs WHERE title LIKE ? ORDER BY date_watched DESC');
     const logs = stmt.all(`%${q}%`);
     res.json(logs);
 });
