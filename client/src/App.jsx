@@ -20,25 +20,26 @@ import avatarImg from "./avatar.jpg";
 
 const API_URL = import.meta.env.PROD ? "/api" : "http://localhost:3001/api";
 
+// --- UPDATED RATINGS CONFIGURATION ---
 const RATINGS = {
   SKIP: {
     label: "SKIP",
-    badge: "text-red-400 border-red-900/50 bg-red-900/20",
-    text: "text-red-400",
+    badge: "text-gray-400 border-gray-700 bg-gray-800", // Grey palette
+    text: "text-gray-400",
   },
-  TIMEPASS: {
-    label: "TIMEPASS",
-    badge: "text-stone-400 border-stone-700 bg-stone-800",
-    text: "text-stone-400",
-  },
-  GO_FOR_IT: {
-    label: "GO FOR IT",
-    badge: "text-blue-400 border-blue-900/50 bg-blue-900/20",
+  OK_OK: {
+    label: "OK OK",
+    badge: "text-blue-400 border-blue-900/50 bg-blue-900/20", // Blue palette
     text: "text-blue-400",
   },
-  LISAN_AL_GAIB: {
-    label: "LISAN AL GAIB",
-    badge: "text-amber-400 border-amber-900/50 bg-amber-900/20",
+  SOLID: {
+    label: "SOLID",
+    badge: "text-green-400 border-green-900/50 bg-green-900/20", // Green palette
+    text: "text-green-400",
+  },
+  PERFECTION: {
+    label: "PERFECTION",
+    badge: "text-amber-400 border-amber-900/50 bg-amber-900/20", // Gold/Amber palette
     text: "text-amber-400",
   },
 };
@@ -54,7 +55,7 @@ const STATUS_CONFIG = {
 };
 
 export default function App() {
-  // 1. SAARE HOOKS SABSE UPAR (Zaroori Hai)
+  // 1. SAARE HOOKS SABSE UPAR
   const [password, setPassword] = useState(
     localStorage.getItem("media_log_password") || ""
   );
@@ -80,7 +81,7 @@ export default function App() {
     title: "",
     type: "MOVIE",
     release_year: "",
-    rating: "GO_FOR_IT",
+    rating: "SOLID", // <--- CHANGED DEFAULT FROM 'GO_FOR_IT' TO 'SOLID'
     status: "COMPLETED",
     date_watched: new Date().toISOString().split("T")[0],
     is_rewatch: false,
@@ -104,7 +105,6 @@ export default function App() {
         headers: getHeaders(),
       });
 
-      // Agar password galat hai
       if (res.status === 403) {
         setIsAuthenticated(false);
         setAuthError("Incorrect Password");
@@ -112,7 +112,6 @@ export default function App() {
         return;
       }
 
-      // Agar sab sahi hai
       if (res.ok) {
         const contentType = res.headers.get("content-type");
         if (contentType && contentType.includes("application/json")) {
@@ -122,7 +121,7 @@ export default function App() {
           setAuthError("");
           localStorage.setItem("media_log_password", password);
         } else {
-          console.error("Server ne HTML bhej diya galti se.");
+          console.error("Server returned HTML instead of JSON.");
         }
       }
     } catch (error) {
@@ -134,7 +133,7 @@ export default function App() {
     if (password) fetchLogs(search);
   }, [search]);
 
-  // --- MEMOIZED DATA (Yeh "if" ke upar hona chahiye) ---
+  // --- MEMOIZED DATA ---
   const filteredLogs = useMemo(() => {
     return logs
       .filter((log) => {
@@ -160,8 +159,11 @@ export default function App() {
         if (filters.year !== "ALL" && String(log.release_year) !== filters.year)
           return false;
         if (filters.type !== "ALL" && log.type !== filters.type) return false;
+        
+        // Note: Old data might have "GO_FOR_IT", so strictly matching strictly might hide old logs unless updated
         if (filters.rating !== "ALL" && log.rating !== filters.rating)
           return false;
+          
         if (
           filters.status !== "ALL" &&
           (log.status || "COMPLETED") !== filters.status
@@ -247,11 +249,13 @@ export default function App() {
       });
       setIsFormOpen(false);
       setEditingId(null);
+      
+      // Reset form to SOLID default
       setFormData({
         title: "",
         type: "MOVIE",
         release_year: "",
-        rating: "GO_FOR_IT",
+        rating: "SOLID", 
         status: "COMPLETED",
         date_watched: new Date().toISOString().split("T")[0],
         is_rewatch: false,
@@ -279,7 +283,7 @@ export default function App() {
       title: "",
       type: "MOVIE",
       release_year: "",
-      rating: "GO_FOR_IT",
+      rating: "SOLID", // <--- CHANGED DEFAULT HERE TOO
       status: "COMPLETED",
       date_watched: new Date().toISOString().split("T")[0],
       is_rewatch: false,
@@ -296,7 +300,7 @@ export default function App() {
     if (dateRange === "LAST_MONTH") return "Last Month";
   };
 
-  // 2. AUTH CHECK (Sab hooks ke baad)
+  // 2. AUTH CHECK
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
@@ -336,7 +340,7 @@ export default function App() {
     );
   }
 
-  // 3. MAIN APP UI (Agar logged in hai toh ye dikhega)
+  // 3. MAIN APP UI
   return (
     <div className="min-h-screen p-4 md:p-8 max-w-6xl mx-auto pb-20">
       {/* Header */}
@@ -344,7 +348,7 @@ export default function App() {
         <div className="flex items-center gap-4 mb-6">
           <div className="w-14 h-14 md:w-16 md:h-16 shrink-0 rounded-full border-2 border-stone-700 shadow-md overflow-hidden bg-stone-800 flex items-center justify-center">
             <img
-              src={avatarImg} // <-- "/avatar.jpg" hata kar {avatarImg} likhna hai
+              src={avatarImg} 
               alt="Profile"
               className="w-full h-full object-cover"
               onError={(e) => {
@@ -558,7 +562,11 @@ export default function App() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredLogs.map((log) => {
           const StatusIcon = STATUS_CONFIG[log.status || "COMPLETED"].icon;
-          const ratingColor = RATINGS[log.rating].text;
+          
+          // SAFETY CHECK: Handle old data gracefully if key doesn't exist
+          const ratingData = RATINGS[log.rating] || RATINGS.SOLID;
+          const ratingColor = ratingData.text;
+
           return (
             <article
               key={log.id}
@@ -568,10 +576,10 @@ export default function App() {
                 <div className="flex items-center gap-2">
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
-                      RATINGS[log.rating].badge
+                      ratingData.badge
                     }`}
                   >
-                    {RATINGS[log.rating].label}
+                    {ratingData.label}
                   </span>
                   <span
                     className={`text-[10px] flex items-center gap-1 ${
